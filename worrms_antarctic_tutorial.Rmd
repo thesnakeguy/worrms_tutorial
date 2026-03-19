@@ -1,0 +1,753 @@
+---
+title: "Exploring Antarctic Marine Species with `worrms`"
+subtitle: "World Register of Marine Species R Client"
+author: "Pablo Deschepper | Institute for Natural Sciences, Brussels"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    theme: flatly
+    highlight: tango
+    code_folding: show
+    number_sections: true
+  pdf_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo      = TRUE,
+  message   = FALSE,
+  warning   = FALSE,
+  cache     = FALSE,   # set TRUE to cache API calls during development
+  fig.width = 9,
+  fig.height = 6,
+  comment   = "#>"
+)
+```
+
+---
+
+# Introduction
+
+## What is WoRMS?
+
+The **World Register of Marine Species (WoRMS)** is the authoritative global checklist of all
+known marine species. It is maintained by a network of taxonomic experts and provides:
+
+- Validated, accepted scientific names with full synonymy
+- Taxonomic classification (kingdom → species)
+- Trait / attribute data (functional groups, IUCN status, habitat)
+- Geographic distribution records
+- Cross-links to external databases (GBIF, BOLD, …)
+
+**Website:** <https://www.marinespecies.org/>
+
+## What is `worrms`?
+
+`worrms` is the official R client for the WoRMS REST API, developed by
+[rOpenSci](https://ropensci.org/). It wraps every public API endpoint into
+tidy, tibble-returning R functions.
+
+**Key design principles:**
+
+- Every function name begins with `wm_` (WoRMS marker)
+- Functions ending in `_` accept **vectorised** inputs (multiple IDs / names in one call)
+- All results are returned as `tibble's` or lists of `tibble's`
+
+## Session goals
+
+1. Install and load `worrms`
+2. Walk through **every** function family with Antarctic examples
+3. Demonstrate a full biodiversity use-case combining `worrms` with the **GBIF** occurrence data
+   (via `rgbif`)
+
+---
+
+# Setup
+
+## Installation
+
+```{r install, eval=FALSE}
+# From CRAN
+install.packages("worrms")
+
+# Or the development version from GitHub (requires remotes)
+# remotes::install_github("ropensci/worrms")
+
+# Companion packages used in this tutorial
+install.packages(c("tidyverse", "rgbif", "sf", "rnaturalearth",
+                   "rnaturalearthdata", "DT", "knitr", "kableExtra"))
+```
+
+## Load packages
+
+```{r load-packages}
+library(worrms)      # WoRMS API client
+library(tidyverse)   # Data wrangling + ggplot2
+library(rgbif)       # GBIF occurrence data
+library(sf)          # Spatial operations
+library(rnaturalearth)   # World basemap
+library(rnaturalearthdata)
+library(knitr)       # Tables in Rmd
+library(kableExtra)  # Styled tables
+```
+
+> **API note:** `worrms` calls the WoRMS REST API over HTTPS — no authentication key required.
+> Be mindful of rate limits: avoid looping thousands of single calls; use the vectorised
+> `_` variants instead.
+
+---
+
+# Core concepts: the AphiaID
+
+Every taxon in WoRMS has a unique integer identifier called the **AphiaID**. This is the
+primary key used across all functions. The first thing you usually do is convert a
+scientific name to an AphiaID.
+
+> **Tip:** Always work with *accepted* AphiaIDs. `worrms` will tell you if a name is a
+> synonym and what the valid name / ID is.
+
+---
+
+# Function family 1 — Name ↔ ID lookups
+
+## `wm_name2id()` — Scientific name → AphiaID
+
+The simplest entry point: give a name, get the ID.
+
+```{r name2id}
+# Single species: Antarctic krill
+krill_id <- wm_name2id("Euphausia superba")
+krill_id
+```
+
+```{r name2id-multi}
+# Vectorised version: multiple names at once (note the trailing _)
+antarctic_names <- c(
+  "Euphausia superba",        # Antarctic krill
+  "Dissostichus eleginoides", # Patagonian toothfish
+  "Aptenodytes forsteri",     # Emperor penguin (marine but also terrestrial)
+  "Notothenia coriiceps",     # Black rockcod
+  "Balaenoptera musculus",    # Blue whale
+  "Limacina helicina"         # Pteropod sea butterfly
+)
+
+aphia_ids <- wm_name2id_(antarctic_names)
+aphia_ids   # Returns a named list
+```
+
+## `wm_id2name()` — AphiaID → Scientific name
+
+Reverse lookup: useful when you have a list of IDs from another database.
+
+```{r id2name}
+wm_id2name(236217)   # single ID — Euphausia superba
+
+# Vectorised version: look up IDs dynamically so they never go stale
+id_vec <- unlist(wm_name2id_(c("Euphausia superba",
+                                "Dissostichus eleginoides",
+                                "Notothenia coriiceps")))
+wm_id2name_(id_vec)
+```
+
+---
+
+# Function family 2 — Full taxon records
+
+## `wm_record()` — Complete AphiaRecord for a single ID
+
+This is the workhorse function. Returns ~25 fields per taxon.
+
+```{r wm-record}
+krill_record <- wm_record(236217)   # Euphausia superba AphiaID
+
+# Show all columns
+glimpse(krill_record)
+```
+
+Key fields to know:
+
+| Field | Meaning |
+|---|---|
+| `AphiaID` | Unique WoRMS identifier |
+| `scientificname` | Accepted or queried name |
+| `status` | `"accepted"`, `"unaccepted"` (synonym), etc. |
+| `valid_AphiaID` | AphiaID of the accepted name (differs from AphiaID if synonym) |
+| `rank` | Taxonomic rank (Species, Genus, …) |
+| `kingdom` / `phylum` / `class` … | Higher taxonomy |
+| `isMarine` / `isBrackish` / `isFreshwater` / `isTerrestrial` | Habitat flags |
+| `isExtinct` | Extinction status |
+| `citation` | How to cite this record |
+| `lsid` | Life Science Identifier (globally unique URI) |
+
+## `wm_records_name()` — Search by name (fuzzy optional)
+
+```{r records-name}
+# Exact match
+wm_records_name("Euphausia superba") |> select(AphiaID, scientificname, status, rank)
+
+# Fuzzy matching — great for typos or uncertain spelling
+wm_records_name("Euphausia su", fuzzy = TRUE) |>
+  select(AphiaID, scientificname, status, rank, match_type)
+```
+
+## `wm_records_names()` — Multiple names at once
+
+```{r records-names}
+# Vectorised version for a species list
+multi_records <- wm_records_names(antarctic_names)
+
+# Each element of the list is a tibble for one input name
+names(multi_records) <- antarctic_names
+
+# Bind them and keep key columns
+all_records <- bind_rows(multi_records, .id = "query") |>
+  select(query, AphiaID, scientificname, status, rank, isMarine, isExtinct)
+
+kbl(all_records, caption = "WoRMS records for selected Antarctic taxa") |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+## `wm_records_taxamatch()` — TAXAMATCH fuzzy matching algorithm
+
+TAXAMATCH is WoRMS' own name-matching algorithm — more sophisticated than simple fuzzy
+matching. Ideal for cleaning up species lists from field data.
+
+```{r taxamatch}
+# Try some slightly messy names
+messy_names <- c("Euphausia superba",     # correct
+                 "Euphausia supurba",      # typo
+                 "Notothenia coriceps")    # missing letter
+
+taxamatch_results <- wm_records_taxamatch(messy_names)
+
+bind_rows(taxamatch_results, .id = "query_index") |>
+  select(query_index, scientificname, status, match_type)
+```
+
+## `wm_records_common()` — Search by vernacular (common) name
+
+```{r records-common}
+# Find species whose common name includes "krill"
+krill_results <- wm_records_common("krill", fuzzy = FALSE)
+krill_results |> select(AphiaID, scientificname, rank) |> head(10)
+```
+
+## `wm_records_rank()` — Browse by taxonomic rank within a group
+
+```{r records-rank}
+# Look up the AphiaID for Euphausiidae dynamically (avoids hardcoded IDs going stale)
+euphausiidae_id <- wm_name2id("Euphausiidae")
+cat("Euphausiidae AphiaID:", euphausiidae_id, "\n")
+
+# All accepted species in Euphausiidae — rank 220 = Species in WoRMS
+euphausiid_spp <- wm_records_rank(220, id = euphausiidae_id) |> distinct(scientificname, AphiaID, .keep_all = TRUE)
+nrow(euphausiid_spp)
+euphausiid_spp |> select(AphiaID, scientificname, status) |> head(10)
+```
+
+## `wm_records_date()` — Records modified since a given date
+
+Useful for tracking updates to the database over time.
+
+```{r records-date}
+# Records added or modified since the start of 2024
+recent <- wm_records_date("2024-01-01T00:00:00+00:00")
+nrow(recent)
+recent |> select(AphiaID, scientificname, rank, modified) |> head(8)
+```
+
+---
+
+# Function family 3 — Taxonomy tree navigation
+
+## `wm_classification()` — Full classification path
+
+```{r classification}
+# Full taxonomy from kingdom to species for Antarctic krill
+krill_class <- wm_classification(236217)
+krill_class
+
+# Tidy view
+krill_class |>
+  select(rank, scientificname) |>
+  kbl(caption = "Taxonomic classification of *Euphausia superba*") |>
+  kable_styling(bootstrap_options = "striped", full_width = FALSE)
+```
+
+## `wm_children()` — Direct taxonomic children
+
+```{r children}
+# Children of order Euphausiacea (AphiaID = 1128)
+# We look this up dynamically first to future-proof the code
+euphausiacea_id <- wm_name2id("Euphausiacea")
+cat("Euphausiacea AphiaID:", euphausiacea_id, "\n")
+
+# wm_children() returns HTTP 204 (No Content) — and therefore throws an error —
+# when a taxon has no registered children. Always guard with tryCatch().
+euphausiacea_children <- wm_children(euphausiacea_id)
+euphausiacea_children |> select(AphiaID, scientificname, rank) |> head(15)
+```
+
+## `wm_ranks_id()` and `wm_ranks_name()` — Look up taxonomic rank names
+**Important:**The same rank (e.g., Species) exists independently in multiple kingdoms
+
+```{r ranks}
+# What is rank 220?
+wm_ranks_id(220)
+
+# What rank ID does "Species" have?
+wm_ranks_name("Species")
+```
+
+---
+
+# Function family 4 — Synonyms & nomenclature
+
+## `wm_synonyms()` — All synonyms for a taxon
+
+```{r synonyms}
+# Synonyms of Euphausia superba
+syn <- wm_synonyms(236217)
+if (nrow(syn) > 0) {
+  syn |> select(AphiaID, scientificname, status, unacceptreason)
+} else {
+  cat("No synonyms found for this taxon.\n")
+}
+```
+
+```{r synonyms-toothfish}
+# Patagonian toothfish 
+toothfish_id <- wm_name2id("Dissostichus eleginoides")
+toothfish_syn <- wm_synonyms(toothfish_id)
+toothfish_syn |> select(AphiaID, scientificname, status)
+```
+
+---
+
+# Function family 5 — Vernacular names
+
+## `wm_common_id()` — Common names for an AphiaID
+
+```{r common-names}
+common <- wm_common_id(236217)   # Euphausia superba
+common
+
+```
+
+---
+
+# Function family 6 — Geographic distribution
+
+## `wm_distribution()` — Distribution records by AphiaID
+
+```{r distribution}
+krill_dist <- wm_distribution(236217)
+glimpse(krill_dist)
+
+# How many records per locality type?
+krill_dist |> count(locality, sort = TRUE) |> head(15)
+```
+
+---
+
+# Function family 7 — External identifiers
+
+## `wm_external()` — Get an external ID for a taxon
+
+WoRMS stores cross-references to many other databases. Common type codes:
+
+| Code | Database |
+|---|---|
+| `tsn` | ITIS Taxonomic Serial Number |
+| `bold` | Barcode of Life Database |
+| `eol` | Encyclopedia of Life |
+| `col` | Catalogue of Life |
+| `iucn` | IUCN Red List ID |
+| `fishbase` | Fishbase species key |
+
+```{r external}
+# Get the GBIF taxon key for Antarctic krill
+wm_external(234700, type = "fishbase") # Patagonian toothfish
+
+```
+
+## `wm_record_by_external()` — Go the other way: external ID → WoRMS record
+
+```{r record-by-external}
+# Find WoRMS record using an ITIS TSN (Integrated Taxonomic Information System)
+# TSN 96559 = Euphausia superba in ITIS
+wm_record_by_external(96559, type = "tsn")
+```
+
+---
+
+# Function family 8 — Sources & citations
+
+## `wm_sources()` — Literature sources for a taxon
+
+```{r sources}
+sources <- wm_sources(236217)
+sources |> select(source_id, reference, page) |> head(5)
+```
+
+---
+
+# Function family 9 — Trait attributes
+
+Attributes are the most powerful and underused part of WoRMS. They encode functional
+traits like body size, diet, habitat, IUCN status, etc.
+
+## `wm_attr_def()` — Attribute type definitions
+
+```{r attr-def}
+# Type 1 = IUCN Red List Category
+wm_attr_def(id = 1)
+
+# Type 15 = Body size
+wm_attr_def(id = 15)
+```
+
+## `wm_attr_category()` — Attribute category values
+
+```{r attr-category}
+# What values exist for functional group (CategoryID = 7)?
+func_groups <- wm_attr_category(id = 7)
+func_groups |> select(measurementValueID, measurementValue)
+```
+
+## `wm_attr_data()` — Trait data for a specific taxon
+
+```{r attr-data}
+# Attributes for Antarctic krill
+krill_attrs <- wm_attr_data(236217)
+krill_attrs |> glimpse()
+```
+
+```{r attr-data-multi}
+# Vectorised: get traits for several taxa at once
+ids_to_check <- unlist(wm_name2id_(c("Euphausia superba",
+                                      "Dissostichus eleginoides",
+                                      "Notothenia coriiceps")))
+attr_list <- wm_attr_data_(ids_to_check)
+
+# Bind and summarise
+attr_all <- bind_rows(attr_list)
+attr_all |>
+  select(AphiaID, measurementType, measurementValue) |>
+  head(20)
+```
+
+## `wm_attr_aphia()` — All taxa that have a given attribute
+
+```{r attr-aphia}
+# Get AphiaIDs of taxa that have any attribute from category 1 (IUCN Red List)
+# (returns up to 50 per page — the API is paginated)
+taxa_with_fg <- wm_attr_aphia(id = 1)
+head(taxa_with_fg, 10)
+```
+
+---
+
+# Full use-case — Antarctic fish biodiversity with WoRMS + GBIF
+
+Here we bring everything together. We will:
+
+1. Identify the taxonomic subtree of Antarctic *Notothenioidei* (the dominant Antarctic fish group) via WoRMS
+2. Resolve accepted names and AphiaIDs
+3. Retrieve occurrence records from GBIF
+4. Enrich with WoRMS trait data
+5. Visualise species richness and trait composition
+
+## Step 1 — Find the Notothenioidei subtree in WoRMS
+
+```{r usecase-subtree}
+# AphiaID for suborder Notothenioidei
+notothenioidei_id <- wm_name2id("Notothenioidei")
+notothenioidei_id
+
+# Classification to confirm position
+wm_classification(notothenioidei_id) |> select(rank, scientificname)
+```
+
+```{r usecase-families}
+# Direct children (families) — look up ID dynamically
+notothenioidei_id <- wm_name2id("Notothenioidei")
+
+notothenioidei_families <- tryCatch(
+  wm_children(notothenioidei_id),
+  error = function(e) {
+    message("wm_children() returned no content or errored: ", conditionMessage(e))
+    tibble()
+  }
+)
+notothenioidei_families |> select(AphiaID, scientificname, rank)
+```
+
+```{r usecase-species}
+# For each family, get all species (rank 220)
+# We use wm_records_rank_ (vectorised) where possible
+family_ids <- notothenioidei_families |>
+  filter(rank == "Family") |>
+  pull(AphiaID)
+
+# Retrieve species per family — wrap in purrr for safe iteration
+species_list <- map(family_ids, function(fid) {
+  tryCatch(
+    wm_records_rank(220, id = fid),
+    error = function(e) NULL
+  )
+})
+
+# Name the list by family
+names(species_list) <- notothenioidei_families |>
+  filter(rank == "Family") |>
+  pull(scientificname)
+
+# Bind into one data frame
+notothenioidei_spp <- bind_rows(species_list, .id = "family") |>
+  filter(status == "accepted")
+
+cat("Total accepted Notothenioidei species in WoRMS:", nrow(notothenioidei_spp), "\n")
+
+notothenioidei_spp |>
+  count(family, name = "n_species") |>
+  arrange(desc(n_species)) |>
+  kbl(caption = "Accepted species per Notothenioidei family") |>
+  kable_styling(bootstrap_options = c("striped", "condensed"), full_width = FALSE)
+```
+
+## Step 2 — Retrieve GBIF occurrences south of 60°S
+
+```{r usecase-gbif, eval=TRUE}
+# Get accepted scientific names to pass to GBIF
+target_species <- notothenioidei_spp |>
+  slice_head(n = 20) |>   # limit to 20 spp for demo (remove slice_head for full run)
+  pull(scientificname)
+
+# Download occurrences from GBIF via occ_search()
+gbif_results <- map(target_species, function(sp) {
+  tryCatch(
+    occ_search(
+      scientificName = sp,
+      decimalLatitude = "-90,-60",   # south of 60°S
+      hasCoordinate  = TRUE,
+      limit          = 200,
+      fields         = c("name", "decimalLatitude", "decimalLongitude",
+                         "year", "datasetName", "species")
+    )$data,
+    error = function(e) NULL
+  )
+})
+
+names(gbif_results) <- target_species
+gbif_df <- bind_rows(gbif_results) |>
+  filter(!is.na(decimalLatitude), !is.na(decimalLongitude))
+
+cat("Total GBIF occurrence records retrieved:", nrow(gbif_df), "\n")
+```
+
+## Step 3 — Join WoRMS metadata onto GBIF records
+
+```{r usecase-join}
+# Get WoRMS AphiaIDs for the same species names
+worms_lookup <- notothenioidei_spp |>
+  filter(scientificname %in% target_species) |>
+  select(scientificname, AphiaID, family, isMarine, isExtinct, citation)
+
+# Join
+gbif_enriched <- gbif_df |>
+  rename(scientificname = species) |>
+  left_join(worms_lookup, by = "scientificname")
+
+glimpse(gbif_enriched)
+```
+
+## Step 4 — Retrieve WoRMS trait data and join
+
+```{r usecase-traits}
+# Get AphiaIDs
+focal_ids <- worms_lookup$AphiaID
+
+# Fetch trait data (may take a moment)
+trait_list <- map(focal_ids, function(aid) {
+  tryCatch(wm_attr_data(aid), error = function(e) NULL)
+})
+names(trait_list) <- focal_ids
+
+trait_df <- bind_rows(trait_list, .id = "AphiaID") |>
+  mutate(AphiaID = as.integer(AphiaID)) |>
+  filter(measurementType %in% c("Functional group", "IUCN Red List Category",
+                                 "Body size", "Diet"))
+
+# Pivot wider for easy use
+trait_wide <- trait_df |>
+  select(AphiaID, measurementType, measurementValue) |>
+  distinct() |>
+  pivot_wider(names_from = measurementType, values_from = measurementValue,
+              values_fn = \(x) paste(unique(x), collapse = "; "))
+
+# Final enriched species table
+species_enriched <- worms_lookup |>
+  left_join(trait_wide, by = "AphiaID")
+
+kbl(species_enriched |> select(scientificname,`Body size`),
+    caption = "Notothenioidei species with WoRMS Body Size") |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+## Step 5 — Visualise
+
+### Occurrence map — south polar projection
+
+```{r usecase-map, fig.cap="GBIF occurrences of Notothenioidei south of 60°S"}
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+gbif_sf <- st_as_sf(gbif_enriched,
+                    coords = c("decimalLongitude", "decimalLatitude"),
+                    crs = 4326)
+
+ggplot() +
+  geom_sf(data = st_transform(world, 3031),
+          fill = "grey80", colour = "white", linewidth = 0.15) +
+  geom_sf(data = st_transform(gbif_sf, 3031),
+          aes(colour = family),
+          alpha = 0.6, size = 1.8) +
+  coord_sf(crs = 3031,
+           xlim = c(-4000000, 4000000),
+           ylim = c(-4000000, 4000000)) +
+  scale_colour_brewer(palette = "Set2", name = "Family") +
+  labs(title = "Notothenioidei occurrence records (GBIF, south of 60S)",
+       subtitle = paste0(nrow(gbif_enriched), " records | ",
+                         n_distinct(gbif_enriched$scientificname), " species"),
+       x = NULL, y = NULL) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "bottom",
+        plot.title = element_text(face = "bold"))
+```
+
+### Species richness per family
+
+```{r usecase-richness-plot, fig.cap="Species richness per Notothenioidei family"}
+notothenioidei_spp |>
+  count(family, name = "n_species") |>
+  mutate(family = fct_reorder(family, n_species)) |>
+  ggplot(aes(x = n_species, y = family, fill = n_species)) +
+  geom_col(show.legend = FALSE) +
+  scale_fill_viridis_c(option = "mako", direction = -1) +
+  labs(title    = "Species richness across Notothenioidei families (WoRMS)",
+       subtitle = "Accepted species only",
+       x = "Number of accepted species", y = NULL) +
+  theme_minimal(base_size = 13) +
+  theme(plot.title = element_text(face = "bold"))
+```
+
+### Occurrence records per decade
+
+```{r usecase-temporal, fig.cap="GBIF records per decade for focal Notothenioidei"}
+gbif_enriched |>
+  filter(!is.na(year)) |>
+  mutate(decade = (year %/% 10) * 10) |>
+  count(decade, family) |>
+  ggplot(aes(x = decade, y = n, fill = family)) +
+  geom_col() +
+  scale_fill_brewer(palette = "Set2", name = "Family") +
+  labs(title    = "GBIF sampling effort through time — Notothenioidei",
+       x = "Decade", y = "Number of occurrence records") +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom",
+        plot.title = element_text(face = "bold"))
+```
+
+---
+
+# Quick-reference cheat sheet
+
+```{r cheatsheet, echo=FALSE}
+cheatsheet <- tibble::tribble(
+  ~`Function`,               ~`Purpose`,                                        ~`Vectorised version`,
+  "wm_name2id()",            "Scientific name → AphiaID",                       "wm_name2id_()",
+  "wm_id2name()",            "AphiaID → scientific name",                       "wm_id2name_()",
+  "wm_record()",             "Full AphiaRecord for one ID",                     "wm_record_()",
+  "wm_records_name()",       "Search by name (fuzzy optional)",                 "—",
+  "wm_records_names()",      "Multiple names → list of records",                "—",
+  "wm_records_taxamatch()",  "TAXAMATCH fuzzy matching",                        "—",
+  "wm_records_common()",     "Search by vernacular name",                       "wm_records_common_()",
+  "wm_records_rank()",       "All taxa of a given rank under a parent",         "—",
+  "wm_records_date()",       "Records modified since a date",                   "—",
+  "wm_classification()",     "Full taxonomic classification",                   "wm_classification_()",
+  "wm_children()",           "Direct taxonomic children",                       "wm_children_()",
+  "wm_synonyms()",           "All synonyms / unaccepted names",                 "wm_synonyms_()",
+  "wm_common_id()",          "Vernacular names for an AphiaID",                 "wm_common_id_()",
+  "wm_distribution()",       "Geographic distribution records",                 "wm_distribution_()",
+  "wm_external()",           "External database ID (GBIF, IUCN, …)",           "wm_external_()",
+  "wm_record_by_external()", "External ID → WoRMS record",                     "wm_record_by_external_()",
+  "wm_sources()",            "Literature sources / references",                 "wm_sources_()",
+  "wm_attr_def()",           "Attribute type definitions",                      "wm_attr_def_()",
+  "wm_attr_category()",      "Attribute category values",                       "wm_attr_category_()",
+  "wm_attr_data()",          "Trait attribute data for a taxon",                "wm_attr_data_()",
+  "wm_attr_aphia()",         "AphiaIDs with a given attribute",                 "wm_attr_aphia_()",
+  "wm_ranks_id()",           "Rank name from rank ID",                          "—",
+  "wm_ranks_name()",         "Rank ID from rank name",                          "—"
+)
+
+kbl(cheatsheet, caption = "worrms function cheat sheet") |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = TRUE,
+                font_size = 13) |>
+  column_spec(1, monospace = TRUE, bold = TRUE, color = "#2C7BB6")
+```
+
+---
+
+# Tips & best practices
+
+**1. Always use vectorised `_` variants for multiple taxa**
+
+```r
+# Slow — one API call per species
+results <- map(my_ids, wm_record)
+
+# Fast — one API call for up to 50 IDs
+results <- wm_record_(my_ids)
+```
+
+**2. Handle `NULL` / empty results gracefully**
+
+The WoRMS API returns HTTP 204 (No Content) when nothing matches. `worrms` converts these
+to `NULL` or empty tibbles. Always use `tryCatch()` or `purrr::possibly()` in loops.
+
+```r
+safe_record <- possibly(wm_record, otherwise = NULL)
+results <- map(my_ids, safe_record)
+```
+
+**3. Check `status` before using records**
+
+Some names are unaccepted synonyms. Always filter or redirect to `valid_AphiaID`.
+
+```r
+records |> filter(status == "accepted")
+# or
+records |> mutate(use_id = if_else(status == "accepted", AphiaID, valid_AphiaID))
+```
+
+**4. Cite WoRMS in your work**
+
+Use `wm_sources()` to get the exact reference for each taxon, or cite the database itself:
+
+> WoRMS Editorial Board (2024). World Register of Marine Species.
+> Available from <https://www.marinespecies.org> at VLIZ.
+> Accessed `r Sys.Date()`. DOI: 10.14284/170
+
+---
+
+# Session information
+
+```{r session-info}
+sessionInfo()
+```
