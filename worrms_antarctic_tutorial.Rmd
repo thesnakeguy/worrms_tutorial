@@ -37,12 +37,12 @@ knitr::opts_chunk$set(
 ## What is WoRMS?
 
 The **World Register of Marine Species (WoRMS)** is the authoritative global checklist of all
-known marine species. It is maintained by a network of taxonomic experts and provides:
+known marine species. It is maintained by a network of taxonomic experts, hosted by VLIZ and provides:
 
 - Validated, accepted scientific names with full synonymy
 - Taxonomic classification (kingdom → species)
 - Trait / attribute data (functional groups, IUCN status, habitat)
-- Geographic distribution records
+- Geographic distribution 
 - Cross-links to external databases (GBIF, BOLD, …)
 
 **Website:** <https://www.marinespecies.org/>
@@ -527,7 +527,7 @@ notothenioidei_spp |>
 ```{r usecase-gbif, eval=TRUE}
 # Get accepted scientific names to pass to GBIF
 target_species <- notothenioidei_spp |>
-  slice_head(n = 20) |>   # limit to 20 spp for demo (remove slice_head for full run)
+ # slice_head(n = 20) |>   # limit to 20 spp for demo (remove slice_head for full run)
   pull(scientificname)
 
 # Download occurrences from GBIF via occ_search()
@@ -537,7 +537,7 @@ gbif_results <- map(target_species, function(sp) {
       scientificName = sp,
       decimalLatitude = "-90,-60",   # south of 60°S
       hasCoordinate  = TRUE,
-      limit          = 200,
+      limit          = 200, # limit to 200 records per species for demo
       fields         = c("name", "decimalLatitude", "decimalLongitude",
                          "year", "datasetName", "species")
     )$data,
@@ -617,11 +617,11 @@ ggplot() +
           fill = "grey80", colour = "white", linewidth = 0.15) +
   geom_sf(data = st_transform(gbif_sf, 3031),
           aes(colour = family),
-          alpha = 0.6, size = 1.8) +
+          alpha = 0.7, size = 1.8) +
   coord_sf(crs = 3031,
            xlim = c(-4000000, 4000000),
            ylim = c(-4000000, 4000000)) +
-  scale_colour_brewer(palette = "Set2", name = "Family") +
+  scale_colour_brewer(palette = "Set3", name = "Family") +
   labs(title = "Notothenioidei occurrence records (GBIF, south of 60S)",
        subtitle = paste0(nrow(gbif_enriched), " records | ",
                          n_distinct(gbif_enriched$scientificname), " species"),
@@ -656,7 +656,7 @@ gbif_enriched |>
   count(decade, family) |>
   ggplot(aes(x = decade, y = n, fill = family)) +
   geom_col() +
-  scale_fill_brewer(palette = "Set2", name = "Family") +
+  scale_fill_brewer(palette = "Set3", name = "Family") +
   labs(title    = "GBIF sampling effort through time — Notothenioidei",
        x = "Decade", y = "Number of occurrence records") +
   theme_minimal(base_size = 13) +
