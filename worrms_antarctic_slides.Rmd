@@ -1,38 +1,42 @@
-<!DOCTYPE html>
-<html lang="" xml:lang="">
-  <head>
-    <title>Antarctic Marine Species Traits</title>
-    <meta charset="utf-8" />
-    <meta name="author" content="Pablo Deschepper | Institute for Natural Sciences, Brussels" />
-    <meta name="date" content="2026-03-26" />
-    <script src="libs/header-attrs-2.30/header-attrs.js"></script>
-    <link href="libs/remark-css-0.0.1/default.css" rel="stylesheet" />
-    <link href="libs/remark-css-0.0.1/metropolis.css" rel="stylesheet" />
-    <link href="libs/remark-css-0.0.1/metropolis-fonts.css" rel="stylesheet" />
-  </head>
-  <body>
-    <textarea id="source">
-class: center, middle, inverse, title-slide
-
-.title[
-# Antarctic Marine Species Traits
-]
-.subtitle[
-## A hands-on tour of the <code>worrms</code> R package
-]
-.author[
-### Pablo Deschepper | Institute for Natural Sciences, Brussels
-]
-.date[
-### 2026-03-26
-]
-
+---
+title: "Antarctic Marine Species Traits"
+subtitle: "A hands-on tour of the `worrms` R package"
+author: "Pablo Deschepper | Institute for Natural Sciences, Brussels"
+date: "`r Sys.Date()`"
+output:
+  xaringan::moon_reader:
+    lib_dir: libs
+    css: [default, metropolis, metropolis-fonts]
+    nature:
+      highlightStyle: github
+      highlightLines: true
+      countIncrementalSlides: false
+      ratio: "16:9"
+      slideNumberFormat: "%current% / %total%"
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo    = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  comment = "#>",
+  fig.retina = 2,
+  fig.align = "center"
+)
+```
 
-
-
-
+```{r packages, include=FALSE}
+library(worrms)
+library(tidyverse)
+library(rgbif)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(knitr)
+library(kableExtra)
+library(qrcode)
+```
 
 ---
 class: inverse, center, middle
@@ -58,7 +62,7 @@ Maintained by taxonomic experts, hosted by **VLIZ**.
 ]
 
 .pull-right[
-&lt;br&gt;&lt;br&gt;
+<br><br>
 **The `worrms` R package**
 
 - Official rOpenSci R client for the WoRMS REST API
@@ -87,46 +91,41 @@ class: inverse, center, middle
 The **AphiaID** is a stable integer identifier — the primary key across all `worrms` functions.
 
 .pull-left[
-
-``` r
+```{r aphia1, eval=FALSE}
 # Name → AphiaID
-krill_id &lt;- wm_name2id("Euphausia superba")
+krill_id <- wm_name2id("Euphausia superba")
 krill_id
 ```
-
+```{r aphia1-out, echo=FALSE}
+236217
 ```
-#&gt; [1] 236217
-```
 
-
-``` r
+```{r aphia2, eval=FALSE}
 # AphiaID → name
 wm_id2name(236217)
 ```
-
-```
-#&gt; [1] "Euphausia superba"
+```{r aphia2-out, echo=FALSE}
+"Euphausia superba"
 ```
 ]
 
 .pull-right[
-
-``` r
+```{r aphia3, eval=FALSE}
 # Vectorised batch lookup (one API call)
-spp &lt;- c("Euphausia superba",
+spp <- c("Euphausia superba",
          "Dissostichus eleginoides",
          "Notothenia coriiceps")
 
 wm_name2id_(spp)
 ```
 
-&gt; ⚡ Always prefer `wm_name2id_()` over  
-&gt; looping `wm_name2id()` — one HTTP request  
-&gt; instead of N.
+> ⚡ Always prefer `wm_name2id_()` over  
+> looping `wm_name2id()` — one HTTP request  
+> instead of N.
 
-&gt; ⚠️ Always check `status`: a name can be  
-&gt; an unaccepted synonym. Use `valid_AphiaID`  
-&gt; to redirect to the accepted record.
+> ⚠️ Always check `status`: a name can be  
+> an unaccepted synonym. Use `valid_AphiaID`  
+> to redirect to the accepted record.
 ]
 
 ---
@@ -140,9 +139,8 @@ class: inverse, center, middle
 
 `wm_record()` is the workhorse: ~25 fields per taxon.
 
-
-``` r
-krill_record &lt;- wm_record(236217)
+```{r record, eval=FALSE}
+krill_record <- wm_record(236217)
 glimpse(krill_record)
 ```
 
@@ -167,19 +165,18 @@ glimpse(krill_record)
 
 ---
 
-# Family 1 — Searching &amp; fuzzy matching
+# Family 1 — Searching & fuzzy matching
 
 .pull-left[
-**Exact &amp; fuzzy search**
-
-``` r
+**Exact & fuzzy search**
+```{r records-name, eval=FALSE}
 # Exact match
-wm_records_name("Euphausia superba") |&gt;
+wm_records_name("Euphausia superba") |>
   select(AphiaID, scientificname, status)
 
 # Fuzzy — great for typos
 wm_records_name("Euphausia su",
-                fuzzy = TRUE) |&gt;
+                fuzzy = TRUE) |>
   select(scientificname, match_type)
 ```
 ]
@@ -187,15 +184,14 @@ wm_records_name("Euphausia su",
 .pull-right[
 **TAXAMATCH** — WoRMS' own algorithm, ideal for cleaning field species lists
 
-
-``` r
-messy &lt;- c("Euphausia superba",  # correct
+```{r taxamatch, eval=FALSE}
+messy <- c("Euphausia superba",  # correct
            "Euphausia supurba",  # typo
            "Notothenia coriceps")# missing letter
 
-res &lt;- wm_records_taxamatch(messy)
+res <- wm_records_taxamatch(messy)
 
-bind_rows(res, .id = "query") |&gt;
+bind_rows(res, .id = "query") |>
   select(query, scientificname,
          status, match_type)
 ```
@@ -207,16 +203,14 @@ bind_rows(res, .id = "query") |&gt;
 
 .pull-left[
 **Full classification path**
-
-``` r
-wm_classification(236217) |&gt;
+```{r class, eval=FALSE}
+wm_classification(236217) |>
   select(rank, scientificname)
 ```
 
 **Direct children of a taxon**
-
-``` r
-euphausiacea_id &lt;- wm_name2id(
+```{r children, eval=FALSE}
+euphausiacea_id <- wm_name2id(
   "Euphausiacea")
 
 # Guard with tryCatch — HTTP 204
@@ -230,20 +224,18 @@ tryCatch(
 
 .pull-right[
 **Rank lookups**
-
-``` r
+```{r ranks, eval=FALSE}
 wm_ranks_id(220)         # → "Species"
 wm_ranks_name("Species") # → 220
 ```
 
-&gt; ⚠️ The same rank (e.g. *Species*) exists  
-&gt; independently in multiple kingdoms —  
-&gt; rank IDs are kingdom-specific.
+> ⚠️ The same rank (e.g. *Species*) exists  
+> independently in multiple kingdoms —  
+> rank IDs are kingdom-specific.
 
 **All species under a parent taxon**
-
-``` r
-euphausiidae_id &lt;- wm_name2id(
+```{r rank-search, eval=FALSE}
+euphausiidae_id <- wm_name2id(
   "Euphausiidae")
 
 wm_records_rank(220,
@@ -253,42 +245,38 @@ wm_records_rank(220,
 
 ---
 
-# Family 3 — Synonyms &amp; vernacular names
+# Family 3 — Synonyms & vernacular names
 
 .pull-left[
 **Synonyms**
-
-``` r
+```{r syn, eval=FALSE}
 # Euphausia superba
-syn &lt;- wm_synonyms(236217)
-syn |&gt; select(scientificname,
+syn <- wm_synonyms(236217)
+syn |> select(scientificname,
               status,
               unacceptreason)
 ```
 
-
-``` r
+```{r syn2, eval=FALSE}
 # Patagonian toothfish
-toothfish_id &lt;- wm_name2id(
+toothfish_id <- wm_name2id(
   "Dissostichus eleginoides")
-wm_synonyms(toothfish_id) |&gt;
+wm_synonyms(toothfish_id) |>
   select(scientificname, status)
 ```
 ]
 
 .pull-right[
 **Common / vernacular names**
-
-``` r
+```{r common, eval=FALSE}
 # All common names for krill
 wm_common_id(236217)
 ```
 
-
-``` r
+```{r common2, eval=FALSE}
 # Search by vernacular name
 wm_records_common("krill",
-                  fuzzy = FALSE) |&gt;
+                  fuzzy = FALSE) |>
   select(AphiaID,
          scientificname, rank)
 ```
@@ -296,24 +284,22 @@ wm_records_common("krill",
 
 ---
 
-# Family 4 — Distribution &amp; external IDs
+# Family 4 — Distribution & external IDs
 
 .pull-left[
 **Geographic distribution**
-
-``` r
-krill_dist &lt;- wm_distribution(236217)
+```{r dist, eval=FALSE}
+krill_dist <- wm_distribution(236217)
 
 # Records per locality
-krill_dist |&gt;
-  count(locality, sort = TRUE) |&gt;
+krill_dist |>
+  count(locality, sort = TRUE) |>
   head(10)
 ```
 
 **Literature sources**
-
-``` r
-wm_sources(236217) |&gt;
+```{r sources, eval=FALSE}
+wm_sources(236217) |>
   select(source_id, reference, page)
 ```
 ]
@@ -330,8 +316,7 @@ wm_sources(236217) |&gt;
 | `iucn` | IUCN Red List |
 | `fishbase` | FishBase |
 
-
-``` r
+```{r external, eval=FALSE}
 wm_external(234700, type = "fishbase")
 wm_record_by_external(96559,
                       type = "tsn")
@@ -351,17 +336,15 @@ WoRMS stores structured **functional trait data** attached to taxa.
 
 .pull-left[
 **Browse attribute type definitions**
-
-``` r
+```{r attr-def, eval=FALSE}
 wm_attr_def(id = 1)   # IUCN Red List
 wm_attr_def(id = 7)   # Functional group
 wm_attr_def(id = 15)  # Body size
 ```
 
 **Browse values within a category**
-
-``` r
-wm_attr_category(id = 7) |&gt;
+```{r attr-cat, eval=FALSE}
+wm_attr_category(id = 7) |>
   select(measurementValueID,
          measurementValue)
 ```
@@ -369,21 +352,19 @@ wm_attr_category(id = 7) |&gt;
 
 .pull-right[
 **Fetch traits for a taxon**
-
-``` r
-krill_attrs &lt;- wm_attr_data(236217)
-krill_attrs |&gt; glimpse()
+```{r attr-data, eval=FALSE}
+krill_attrs <- wm_attr_data(236217)
+krill_attrs |> glimpse()
 ```
 
 **Vectorised batch retrieval**
-
-``` r
-ids &lt;- unlist(wm_name2id_(c(
+```{r attr-batch, eval=FALSE}
+ids <- unlist(wm_name2id_(c(
   "Euphausia superba",
   "Dissostichus eleginoides",
   "Notothenia coriiceps")))
 
-bind_rows(wm_attr_data_(ids)) |&gt;
+bind_rows(wm_attr_data_(ids)) |>
   select(AphiaID, measurementType,
          measurementValue)
 ```
@@ -395,27 +376,25 @@ bind_rows(wm_attr_data_(ids)) |&gt;
 
 `wm_attr_aphia()` flips the question: *which taxa have a given attribute?*
 
-
-``` r
+```{r attr-aphia, eval=FALSE}
 # All taxa with an IUCN Red List category (attribute type 1)
 # Results are paginated — up to 50 per page
-taxa_with_iucn &lt;- wm_attr_aphia(id = 1)
+taxa_with_iucn <- wm_attr_aphia(id = 1)
 head(taxa_with_iucn, 10)
 ```
 
-&lt;br&gt;
+<br>
 
 **Typical trait workflow in one pipeline:**
 
-
-``` r
-ids |&gt;
-  wm_attr_data_() |&gt;                                        # fetch traits (vectorised)
-  bind_rows() |&gt;
-  filter(measurementType == "Body size") |&gt;                 # keep one trait type
+```{r trait-pipeline, eval=FALSE}
+ids |>
+  wm_attr_data_() |>                                        # fetch traits (vectorised)
+  bind_rows() |>
+  filter(measurementType == "Body size") |>                 # keep one trait type
   mutate(size_cm = as.numeric(
-    str_extract(measurementValue, "[0-9]+"))) |&gt;            # parse value
-  group_by(AphiaID) |&gt;
+    str_extract(measurementValue, "[0-9]+"))) |>            # parse value
+  group_by(AphiaID) |>
   summarise(max_size_cm = max(size_cm, na.rm = TRUE))       # one value per species
 ```
 
@@ -449,29 +428,27 @@ with **colour = family** and explore **species richness** and **sampling effort*
 
 # Step 1 — Build the species list
 
-
-``` r
-notothenioidei_id &lt;- wm_name2id("Notothenioidei")
+```{r usecase-subtree, eval=FALSE}
+notothenioidei_id <- wm_name2id("Notothenioidei")
 
 # Confirm taxonomic position
-wm_classification(notothenioidei_id) |&gt; select(rank, scientificname)
+wm_classification(notothenioidei_id) |> select(rank, scientificname)
 ```
 
-
-``` r
+```{r usecase-families, eval=FALSE}
 # Direct children (families)
-notothenioidei_families &lt;- tryCatch(
+notothenioidei_families <- tryCatch(
   wm_children(notothenioidei_id),
   error = function(e) { message(conditionMessage(e)); tibble() }
 )
 
 # All accepted species per family (rank 220 = Species)
-family_ids &lt;- filter(notothenioidei_families, rank == "Family")$AphiaID
+family_ids <- filter(notothenioidei_families, rank == "Family")$AphiaID
 
-species_list &lt;- map(family_ids, \(fid)
+species_list <- map(family_ids, \(fid)
   tryCatch(wm_records_rank(220, id = fid), error = \(e) NULL))
 
-notothenioidei_spp &lt;- bind_rows(species_list, .id = "family") |&gt;
+notothenioidei_spp <- bind_rows(species_list, .id = "family") |>
   filter(status == "accepted")
 
 cat("Total accepted species:", nrow(notothenioidei_spp))
@@ -481,11 +458,10 @@ cat("Total accepted species:", nrow(notothenioidei_spp))
 
 # Step 2 — GBIF occurrences south of 60°S
 
+```{r usecase-gbif, eval=FALSE}
+target_species <- notothenioidei_spp$scientificname
 
-``` r
-target_species &lt;- notothenioidei_spp$scientificname
-
-gbif_results &lt;- map(target_species, \(sp)
+gbif_results <- map(target_species, \(sp)
   tryCatch(
     occ_search(
       scientificName  = sp,
@@ -498,7 +474,7 @@ gbif_results &lt;- map(target_species, \(sp)
     error = \(e) NULL
   ))
 
-gbif_df &lt;- bind_rows(gbif_results) |&gt;
+gbif_df <- bind_rows(gbif_results) |>
   filter(!is.na(decimalLatitude), !is.na(decimalLongitude))
 
 cat("Total GBIF records:", nrow(gbif_df))
@@ -506,29 +482,27 @@ cat("Total GBIF records:", nrow(gbif_df))
 
 ---
 
-# Step 3 — Join WoRMS metadata &amp; traits
+# Step 3 — Join WoRMS metadata & traits
 
-
-``` r
+```{r usecase-join, eval=FALSE}
 # WoRMS lookup table
-worms_lookup &lt;- notothenioidei_spp |&gt;
-  filter(scientificname %in% target_species) |&gt;
+worms_lookup <- notothenioidei_spp |>
+  filter(scientificname %in% target_species) |>
   select(scientificname, AphiaID, family, isMarine, isExtinct)
 
 # Join onto GBIF records
-gbif_enriched &lt;- gbif_df |&gt;
-  rename(scientificname = species) |&gt;
+gbif_enriched <- gbif_df |>
+  rename(scientificname = species) |>
   left_join(worms_lookup, by = "scientificname")
 ```
 
-
-``` r
+```{r usecase-traits, eval=FALSE}
 # Fetch traits and build enriched species table
-trait_df &lt;- bind_rows(
+trait_df <- bind_rows(
   map(worms_lookup$AphiaID, \(aid)
     tryCatch(wm_attr_data(aid), error = \(e) NULL)),
-  .id = "AphiaID") |&gt;
-  mutate(AphiaID = as.integer(AphiaID)) |&gt;
+  .id = "AphiaID") |>
+  mutate(AphiaID = as.integer(AphiaID)) |>
   filter(measurementType %in% c("Functional group",
                                  "IUCN Red List Category",
                                  "Body size", "Diet"))
@@ -538,10 +512,9 @@ trait_df &lt;- bind_rows(
 
 # Step 4 — Occurrence map (EPSG:3031)
 
-
-``` r
-world   &lt;- ne_countries(scale = "medium", returnclass = "sf")
-gbif_sf &lt;- st_as_sf(gbif_enriched,
+```{r usecase-map, eval=FALSE, fig.width=8, fig.height=4.5}
+world   <- ne_countries(scale = "medium", returnclass = "sf")
+gbif_sf <- st_as_sf(gbif_enriched,
                     coords = c("decimalLongitude", "decimalLatitude"), crs = 4326)
 
 ggplot() +
@@ -561,15 +534,14 @@ ggplot() +
 
 ---
 
-# Step 5 — Species richness &amp; sampling effort
+# Step 5 — Species richness & sampling effort
 
 .pull-left[
-
-``` r
-notothenioidei_spp |&gt;
-  count(family, name = "n_species") |&gt;
+```{r richness-plot, eval=FALSE}
+notothenioidei_spp |>
+  count(family, name = "n_species") |>
   mutate(family = fct_reorder(
-    family, n_species)) |&gt;
+    family, n_species)) |>
   ggplot(aes(n_species, family,
              fill = n_species)) +
   geom_col(show.legend = FALSE) +
@@ -582,12 +554,11 @@ notothenioidei_spp |&gt;
 ]
 
 .pull-right[
-
-``` r
-gbif_enriched |&gt;
-  filter(!is.na(year)) |&gt;
-  mutate(decade = (year %/% 10) * 10) |&gt;
-  count(decade, family) |&gt;
+```{r temporal-plot, eval=FALSE}
+gbif_enriched |>
+  filter(!is.na(year)) |>
+  mutate(decade = (year %/% 10) * 10) |>
+  count(decade, family) |>
   ggplot(aes(decade, n, fill = family)) +
   geom_col() +
   scale_fill_brewer(
@@ -603,7 +574,7 @@ gbif_enriched |&gt;
 ---
 class: inverse, center, middle
 
-# Quick reference &amp; best practices
+# Quick reference & best practices
 
 ---
 
@@ -668,10 +639,10 @@ tryCatch(
 .pull-right[
 **3. Always check `status`**
 ```r
-records |&gt; filter(status == "accepted")
+records |> filter(status == "accepted")
 
 # Or redirect synonyms:
-records |&gt; mutate(
+records |> mutate(
   use_id = if_else(
     status == "accepted",
     AphiaID, valid_AphiaID))
@@ -683,9 +654,9 @@ knitr::opts_chunk$set(cache = TRUE)
 ```
 
 **5. Cite WoRMS**
-&gt; WoRMS Editorial Board (2025).  
-&gt; World Register of Marine Species.  
-&gt; DOI: [10.14284/170](https://doi.org/10.14284/170)
+> WoRMS Editorial Board (2025).  
+> World Register of Marine Species.  
+> DOI: [10.14284/170](https://doi.org/10.14284/170)
 ]
 
 ---
@@ -694,148 +665,13 @@ class: inverse, center, middle
 # Thank you
 
 **Full annotated tutorial:**
-&lt;img src="worrms_antarctic_slides_files/figure-html/qr-code-1.png" alt="" width="216" style="display: block; margin: auto;" /&gt;
+```{r qr-code, echo=FALSE, fig.width=3, fig.height=3}
+library(qrcode)
+plot(qr_code("https://thesnakeguy.github.io/worrms_tutorial/worrms_antarctic_tutorial.html"))
+```
 
 **Other links:**  
 📦 [docs.ropensci.org/worrms](https://docs.ropensci.org/worrms)  
 🌐 [www.marinespecies.org](https://www.marinespecies.org)  
 🔬 [obis.org](https://obis.org) 
 📊 [docs.ropensci.org/rgbif](https://docs.ropensci.org/rgbif)
-    </textarea>
-<style data-target="print-only">@media screen {.remark-slide-container{display:block;}.remark-slide-scaler{box-shadow:none;}}</style>
-<script src="https://remarkjs.com/downloads/remark-latest.min.js"></script>
-<script>var slideshow = remark.create({
-  "highlightStyle": "github",
-  "highlightLines": true,
-  "countIncrementalSlides": false,
-  "ratio": "16:9",
-  "slideNumberFormat": "%current% / %total%"
-});
-if (window.HTMLWidgets) slideshow.on('afterShowSlide', function (slide) {
-  window.dispatchEvent(new Event('resize'));
-});
-(function(d) {
-  var s = d.createElement("style"), r = d.querySelector(".remark-slide-scaler");
-  if (!r) return;
-  s.type = "text/css"; s.innerHTML = "@page {size: " + r.style.width + " " + r.style.height +"; }";
-  d.head.appendChild(s);
-})(document);
-
-(function(d) {
-  var el = d.getElementsByClassName("remark-slides-area");
-  if (!el) return;
-  var slide, slides = slideshow.getSlides(), els = el[0].children;
-  for (var i = 1; i < slides.length; i++) {
-    slide = slides[i];
-    if (slide.properties.continued === "true" || slide.properties.count === "false") {
-      els[i - 1].className += ' has-continuation';
-    }
-  }
-  var s = d.createElement("style");
-  s.type = "text/css"; s.innerHTML = "@media print { .has-continuation { display: none; } }";
-  d.head.appendChild(s);
-})(document);
-// delete the temporary CSS (for displaying all slides initially) when the user
-// starts to view slides
-(function() {
-  var deleted = false;
-  slideshow.on('beforeShowSlide', function(slide) {
-    if (deleted) return;
-    var sheets = document.styleSheets, node;
-    for (var i = 0; i < sheets.length; i++) {
-      node = sheets[i].ownerNode;
-      if (node.dataset["target"] !== "print-only") continue;
-      node.parentNode.removeChild(node);
-    }
-    deleted = true;
-  });
-})();
-// add `data-at-shortcutkeys` attribute to <body> to resolve conflicts with JAWS
-// screen reader (see PR #262)
-(function(d) {
-  let res = {};
-  d.querySelectorAll('.remark-help-content table tr').forEach(tr => {
-    const t = tr.querySelector('td:nth-child(2)').innerText;
-    tr.querySelectorAll('td:first-child .key').forEach(key => {
-      const k = key.innerText;
-      if (/^[a-z]$/.test(k)) res[k] = t;  // must be a single letter (key)
-    });
-  });
-  d.body.setAttribute('data-at-shortcutkeys', JSON.stringify(res));
-})(document);
-(function() {
-  "use strict"
-  // Replace <script> tags in slides area to make them executable
-  var scripts = document.querySelectorAll(
-    '.remark-slides-area .remark-slide-container script'
-  );
-  if (!scripts.length) return;
-  for (var i = 0; i < scripts.length; i++) {
-    var s = document.createElement('script');
-    var code = document.createTextNode(scripts[i].textContent);
-    s.appendChild(code);
-    var scriptAttrs = scripts[i].attributes;
-    for (var j = 0; j < scriptAttrs.length; j++) {
-      s.setAttribute(scriptAttrs[j].name, scriptAttrs[j].value);
-    }
-    scripts[i].parentElement.replaceChild(s, scripts[i]);
-  }
-})();
-(function() {
-  var links = document.getElementsByTagName('a');
-  for (var i = 0; i < links.length; i++) {
-    if (/^(https?:)?\/\//.test(links[i].getAttribute('href'))) {
-      links[i].target = '_blank';
-    }
-  }
-})();
-// adds .remark-code-has-line-highlighted class to <pre> parent elements
-// of code chunks containing highlighted lines with class .remark-code-line-highlighted
-(function(d) {
-  const hlines = d.querySelectorAll('.remark-code-line-highlighted');
-  const preParents = [];
-  const findPreParent = function(line, p = 0) {
-    if (p > 1) return null; // traverse up no further than grandparent
-    const el = line.parentElement;
-    return el.tagName === "PRE" ? el : findPreParent(el, ++p);
-  };
-
-  for (let line of hlines) {
-    let pre = findPreParent(line);
-    if (pre && !preParents.includes(pre)) preParents.push(pre);
-  }
-  preParents.forEach(p => p.classList.add("remark-code-has-line-highlighted"));
-})(document);</script>
-
-<script>
-slideshow._releaseMath = function(el) {
-  var i, text, code, codes = el.getElementsByTagName('code');
-  for (i = 0; i < codes.length;) {
-    code = codes[i];
-    if (code.parentNode.tagName !== 'PRE' && code.childElementCount === 0) {
-      text = code.textContent;
-      if (/^\\\((.|\s)+\\\)$/.test(text) || /^\\\[(.|\s)+\\\]$/.test(text) ||
-          /^\$\$(.|\s)+\$\$$/.test(text) ||
-          /^\\begin\{([^}]+)\}(.|\s)+\\end\{[^}]+\}$/.test(text)) {
-        code.outerHTML = code.innerHTML;  // remove <code></code>
-        continue;
-      }
-    }
-    i++;
-  }
-};
-slideshow._releaseMath(document);
-</script>
-<!-- dynamically load mathjax for compatibility with self-contained -->
-<script>
-(function () {
-  var script = document.createElement('script');
-  script.type = 'text/javascript';
-  script.src  = 'https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-MML-AM_CHTML';
-  if (location.protocol !== 'file:' && /^https?:/.test(script.src))
-    script.src  = script.src.replace(/^https?:/, '');
-  document.getElementsByTagName('head')[0].appendChild(script);
-})();
-</script>
-  </body>
-</html>
