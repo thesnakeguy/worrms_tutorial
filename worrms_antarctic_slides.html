@@ -4,7 +4,7 @@
     <title>Antarctic Marine Species Traits</title>
     <meta charset="utf-8" />
     <meta name="author" content="Pablo Deschepper | Institute for Natural Sciences, Brussels" />
-    <meta name="date" content="2026-03-26" />
+    <meta name="date" content="2026-03-31" />
     <script src="libs/header-attrs-2.30/header-attrs.js"></script>
     <link href="libs/remark-css-0.0.1/default.css" rel="stylesheet" />
     <link href="libs/remark-css-0.0.1/metropolis.css" rel="stylesheet" />
@@ -24,7 +24,7 @@ class: center, middle, inverse, title-slide
 ### Pablo Deschepper | Institute for Natural Sciences, Brussels
 ]
 .date[
-### 2026-03-26
+### 2026-03-31
 ]
 
 ---
@@ -73,12 +73,6 @@ library(worrms)
 ```
 ]
 
----
-class: inverse, center, middle
-
-# The AphiaID
-
-### WoRMS' primary key
 
 ---
 
@@ -120,13 +114,16 @@ spp &lt;- c("Euphausia superba",
 wm_name2id_(spp)
 ```
 
-&gt; ⚡ Always prefer `wm_name2id_()` over  
-&gt; looping `wm_name2id()` — one HTTP request  
-&gt; instead of N.
-
-&gt; ⚠️ Always check `status`: a name can be  
-&gt; an unaccepted synonym. Use `valid_AphiaID`  
-&gt; to redirect to the accepted record.
+```
+#&gt; $`Euphausia superba`
+#&gt; [1] 236217
+#&gt; 
+#&gt; $`Dissostichus eleginoides`
+#&gt; [1] 234700
+#&gt; 
+#&gt; $`Notothenia coriiceps`
+#&gt; [1] 234679
+```
 ]
 
 ---
@@ -140,13 +137,35 @@ class: inverse, center, middle
 
 `wm_record()` is the workhorse: ~25 fields per taxon.
 
+.pull-left[
 
 ``` r
-krill_record &lt;- wm_record(236217)
-glimpse(krill_record)
+krill_record &lt;- wm_record(236217)[1:15] |&gt;
+glimpse() 
 ```
 
-.pull-left[
+```
+#&gt; Rows: 1
+#&gt; Columns: 15
+#&gt; $ AphiaID             &lt;int&gt; 236217
+#&gt; $ url                 &lt;chr&gt; "https://www.marinespecies.org/aphia.php?p=taxdeta…
+#&gt; $ scientificname      &lt;chr&gt; "Euphausia superba"
+#&gt; $ authority           &lt;chr&gt; "Dana, 1850"
+#&gt; $ status              &lt;chr&gt; "accepted"
+#&gt; $ unacceptreason      &lt;lgl&gt; NA
+#&gt; $ taxonRankID         &lt;int&gt; 220
+#&gt; $ rank                &lt;chr&gt; "Species"
+#&gt; $ valid_AphiaID       &lt;int&gt; 236217
+#&gt; $ valid_name          &lt;chr&gt; "Euphausia superba"
+#&gt; $ valid_authority     &lt;chr&gt; "Dana, 1850"
+#&gt; $ parentNameUsageID   &lt;int&gt; 110673
+#&gt; $ originalNameUsageID &lt;int&gt; 236217
+#&gt; $ kingdom             &lt;chr&gt; "Animalia"
+#&gt; $ phylum              &lt;chr&gt; "Arthropoda"
+```
+]
+
+.pull-right[
 | Field | Meaning |
 |---|---|
 | `AphiaID` | Unique WoRMS identifier |
@@ -154,10 +173,6 @@ glimpse(krill_record)
 | `status` | `"accepted"` or `"unaccepted"` |
 | `valid_AphiaID` | Points to accepted record |
 | `rank` | Species, Genus, … |
-]
-.pull-right[
-| Field | Meaning |
-|---|---|
 | `isMarine` | Habitat flag |
 | `isBrackish` | Habitat flag |
 | `isFreshwater` | Habitat flag |
@@ -176,11 +191,27 @@ glimpse(krill_record)
 # Exact match
 wm_records_name("Euphausia superba") |&gt;
   select(AphiaID, scientificname, status)
+```
 
+```
+#&gt; # A tibble: 1 × 3
+#&gt;   AphiaID scientificname    status  
+#&gt;     &lt;int&gt; &lt;chr&gt;             &lt;chr&gt;   
+#&gt; 1  236217 Euphausia superba accepted
+```
+
+``` r
 # Fuzzy — great for typos
 wm_records_name("Euphausia su",
                 fuzzy = TRUE) |&gt;
   select(scientificname, match_type)
+```
+
+```
+#&gt; # A tibble: 1 × 2
+#&gt;   scientificname    match_type
+#&gt;   &lt;chr&gt;             &lt;chr&gt;     
+#&gt; 1 Euphausia superba like
 ```
 ]
 
@@ -199,6 +230,15 @@ bind_rows(res, .id = "query") |&gt;
   select(query, scientificname,
          status, match_type)
 ```
+
+```
+#&gt; # A tibble: 3 × 4
+#&gt;   query scientificname       status   match_type
+#&gt;   &lt;chr&gt; &lt;chr&gt;                &lt;chr&gt;    &lt;chr&gt;     
+#&gt; 1 1     Euphausia superba    accepted exact     
+#&gt; 2 2     Euphausia superba    accepted phonetic  
+#&gt; 3 3     Notothenia coriiceps accepted phonetic
+```
 ]
 
 ---
@@ -210,25 +250,48 @@ bind_rows(res, .id = "query") |&gt;
 
 ``` r
 wm_classification(236217) |&gt;
-  select(rank, scientificname)
+  select(rank, scientificname) |&gt; head()
 ```
 
+```
+#&gt; # A tibble: 6 × 2
+#&gt;   rank       scientificname
+#&gt;   &lt;chr&gt;      &lt;chr&gt;         
+#&gt; 1 Kingdom    Animalia      
+#&gt; 2 Phylum     Arthropoda    
+#&gt; 3 Subphylum  Crustacea     
+#&gt; 4 Superclass Multicrustacea
+#&gt; 5 Class      Malacostraca  
+#&gt; 6 Subclass   Eumalacostraca
+```
+]
+
+.pull.right[
 **Direct children of a taxon**
 
 ``` r
 euphausiacea_id &lt;- wm_name2id(
   "Euphausiacea")
 
-# Guard with tryCatch — HTTP 204
-# (no children) throws a hard error
-tryCatch(
-  wm_children(euphausiacea_id),
-  error = function(e) tibble()
-)
+wm_children(euphausiacea_id) |&gt; select(AphiaID, scientificname, status )
+```
+
+```
+#&gt; # A tibble: 3 × 3
+#&gt;   AphiaID scientificname    status                                   
+#&gt;     &lt;int&gt; &lt;chr&gt;             &lt;chr&gt;                                    
+#&gt; 1  110670 Bentheuphausiidae accepted                                 
+#&gt; 2 1649973 Euphausidae       misspelling - incorrect original spelling
+#&gt; 3  110671 Euphausiidae      accepted
 ```
 ]
 
-.pull-right[
+
+---
+
+# Family 2 — Taxonomy tree navigation
+
+.pull-left[
 **Rank lookups**
 
 ``` r
@@ -239,7 +302,9 @@ wm_ranks_name("Species") # → 220
 &gt; ⚠️ The same rank (e.g. *Species*) exists  
 &gt; independently in multiple kingdoms —  
 &gt; rank IDs are kingdom-specific.
+]
 
+.pull.right[
 **All species under a parent taxon**
 
 ``` r
@@ -247,7 +312,19 @@ euphausiidae_id &lt;- wm_name2id(
   "Euphausiidae")
 
 wm_records_rank(220,
-  id = euphausiidae_id)
+  id = euphausiidae_id) |&gt; select(AphiaID, scientificname, status) |&gt; head()
+```
+
+```
+#&gt; # A tibble: 6 × 3
+#&gt;   AphiaID scientificname       status                   
+#&gt;     &lt;int&gt; &lt;chr&gt;                &lt;chr&gt;                    
+#&gt; 1  370561 Boreophausia inermis superseded combination   
+#&gt; 2  492675 Boreophausia raschii superseded combination   
+#&gt; 3 1650121 Cyrtopia detruncata  nomen dubium             
+#&gt; 4  492689 Cyrtopia rostrata    nomen dubium             
+#&gt; 5  110682 Euphausia americana  accepted                 
+#&gt; 6  478929 Euphausia antarctica junior subjective synonym
 ```
 ]
 
@@ -262,17 +339,17 @@ wm_records_rank(220,
 # Euphausia superba
 syn &lt;- wm_synonyms(236217)
 syn |&gt; select(scientificname,
-              status,
-              unacceptreason)
+              status)
 ```
 
-
-``` r
-# Patagonian toothfish
-toothfish_id &lt;- wm_name2id(
-  "Dissostichus eleginoides")
-wm_synonyms(toothfish_id) |&gt;
-  select(scientificname, status)
+```
+#&gt; # A tibble: 4 × 2
+#&gt;   scientificname       status                   
+#&gt;   &lt;chr&gt;                &lt;chr&gt;                    
+#&gt; 1 Euphausia antarctica junior subjective synonym
+#&gt; 2 Euphausia australis  junior subjective synonym
+#&gt; 3 Euphausia glacialis  junior subjective synonym
+#&gt; 4 Euphausia murrayi    junior subjective synonym
 ```
 ]
 
@@ -284,13 +361,14 @@ wm_synonyms(toothfish_id) |&gt;
 wm_common_id(236217)
 ```
 
-
-``` r
-# Search by vernacular name
-wm_records_common("krill",
-                  fuzzy = FALSE) |&gt;
-  select(AphiaID,
-         scientificname, rank)
+```
+#&gt; # A tibble: 4 × 3
+#&gt;   vernacular          language_code language
+#&gt;   &lt;chr&gt;               &lt;chr&gt;         &lt;chr&gt;   
+#&gt; 1 Antarctic krill     eng           English 
+#&gt; 2 Antarctisch krill   nld           Dutch   
+#&gt; 3 Antarktischer Krill deu           German  
+#&gt; 4 krill antarctique   fra           French
 ```
 ]
 
@@ -308,6 +386,13 @@ krill_dist &lt;- wm_distribution(236217)
 krill_dist |&gt;
   count(locality, sort = TRUE) |&gt;
   head(10)
+```
+
+```
+#&gt; # A tibble: 1 × 2
+#&gt;   locality            n
+#&gt;   &lt;chr&gt;           &lt;int&gt;
+#&gt; 1 Antarctic Ocean     1
 ```
 
 **Literature sources**
@@ -333,8 +418,10 @@ wm_sources(236217) |&gt;
 
 ``` r
 wm_external(234700, type = "fishbase")
-wm_record_by_external(96559,
-                      type = "tsn")
+```
+
+```
+#&gt; [1] 467
 ```
 ]
 
@@ -357,7 +444,9 @@ wm_attr_def(id = 1)   # IUCN Red List
 wm_attr_def(id = 7)   # Functional group
 wm_attr_def(id = 15)  # Body size
 ```
+]
 
+.pull-right[
 **Browse values within a category**
 
 ``` r
@@ -365,15 +454,51 @@ wm_attr_category(id = 7) |&gt;
   select(measurementValueID,
          measurementValue)
 ```
+
+```
+#&gt; # A tibble: 8 × 2
+#&gt;   measurementValueID measurementValue
+#&gt;                &lt;int&gt; &lt;chr&gt;           
+#&gt; 1                183 benthos         
+#&gt; 2                184 plankton        
+#&gt; 3                194 nekton          
+#&gt; 4                323 neuston         
+#&gt; 5                621 pleuston        
+#&gt; 6                620 benthopelagic   
+#&gt; 7                378 edaphofauna     
+#&gt; 8                331 not applicable
+```
 ]
 
-.pull-right[
+---
+
+# Trait attributes — overview
+
 **Fetch traits for a taxon**
 
 ``` r
 krill_attrs &lt;- wm_attr_data(236217)
 krill_attrs |&gt; glimpse()
 ```
+
+```
+#&gt; Rows: 8
+#&gt; Columns: 10
+#&gt; $ AphiaID           &lt;int&gt; 236217, 236217, 236217, 236217, 236217, 236217, 2362…
+#&gt; $ measurementTypeID &lt;int&gt; 23, 23, 15, 15, 15, 15, 65, 62
+#&gt; $ measurementType   &lt;chr&gt; "Species importance to society", "Species importance…
+#&gt; $ measurementValue  &lt;chr&gt; "FAO-ASFIS: Species for Fishery Statistics Purposes"…
+#&gt; $ source_id         &lt;int&gt; 197354, 127093, 560782, 560782, 560782, 560782, 2173…
+#&gt; $ reference         &lt;chr&gt; "FAO Fishery Fact Sheets Collections: Aquatic Scienc…
+#&gt; $ qualitystatus     &lt;chr&gt; "unreviewed", "unreviewed", "unreviewed", "unreviewe…
+#&gt; $ AphiaID_Inherited &lt;int&gt; 236217, 236217, 236217, 236217, 236217, 236217, 2362…
+#&gt; $ CategoryID        &lt;int&gt; 13, 13, NA, NA, NA, NA, 30, 28
+#&gt; $ children          &lt;list&gt; [&lt;data.frame[1 x 10]&gt;], [&lt;data.frame[1 x 10]&gt;], [&lt;da…
+```
+
+---
+
+# Trait attributes — overview
 
 **Vectorised batch retrieval**
 
@@ -387,7 +512,28 @@ bind_rows(wm_attr_data_(ids)) |&gt;
   select(AphiaID, measurementType,
          measurementValue)
 ```
-]
+
+```
+#&gt; # A tibble: 16 × 3
+#&gt;    AphiaID measurementType                                  measurementValue    
+#&gt;      &lt;int&gt; &lt;chr&gt;                                            &lt;chr&gt;               
+#&gt;  1  236217 Species importance to society                    FAO-ASFIS: Species …
+#&gt;  2  236217 Species importance to society                    IUCN Red List       
+#&gt;  3  236217 Body size                                        18                  
+#&gt;  4  236217 Body size                                        60                  
+#&gt;  5  236217 Body size                                        19                  
+#&gt;  6  236217 Body size                                        59                  
+#&gt;  7  236217 Brooding                                         No                  
+#&gt;  8  236217 Development                                      indirect development
+#&gt;  9  234700 Species importance to society                    FAO-ASFIS: Species …
+#&gt; 10  234700 Body size                                        215                 
+#&gt; 11  234700 Body size                                        70                  
+#&gt; 12  234700 Species exhibits underwater soniferous behaviour Does not or is unli…
+#&gt; 13  234679 Species importance to society                    FAO-ASFIS: Species …
+#&gt; 14  234679 Body size                                        62                  
+#&gt; 15  234679 Body size                                        50                  
+#&gt; 16  234679 Species exhibits underwater soniferous behaviour Does not or is unli…
+```
 
 ---
 
@@ -403,22 +549,21 @@ taxa_with_iucn &lt;- wm_attr_aphia(id = 1)
 head(taxa_with_iucn, 10)
 ```
 
-&lt;br&gt;
-
-**Typical trait workflow in one pipeline:**
-
-
-``` r
-ids |&gt;
-  wm_attr_data_() |&gt;                                        # fetch traits (vectorised)
-  bind_rows() |&gt;
-  filter(measurementType == "Body size") |&gt;                 # keep one trait type
-  mutate(size_cm = as.numeric(
-    str_extract(measurementValue, "[0-9]+"))) |&gt;            # parse value
-  group_by(AphiaID) |&gt;
-  summarise(max_size_cm = max(size_cm, na.rm = TRUE))       # one value per species
 ```
-
+#&gt; # A tibble: 10 × 2
+#&gt;    AphiaID Attributes   
+#&gt;      &lt;int&gt; &lt;list&gt;       
+#&gt;  1  100801 &lt;df [1 × 10]&gt;
+#&gt;  2  100807 &lt;df [1 × 10]&gt;
+#&gt;  3  100822 &lt;df [1 × 10]&gt;
+#&gt;  4  100823 &lt;df [1 × 10]&gt;
+#&gt;  5  100830 &lt;df [1 × 10]&gt;
+#&gt;  6  100831 &lt;df [1 × 10]&gt;
+#&gt;  7  100870 &lt;df [1 × 10]&gt;
+#&gt;  8  100888 &lt;df [1 × 10]&gt;
+#&gt;  9  100906 &lt;df [1 × 10]&gt;
+#&gt; 10  100985 &lt;df [1 × 10]&gt;
+```
 ---
 class: inverse, center, middle
 
@@ -436,7 +581,6 @@ class: inverse, center, middle
  wm_name2id("Notothenioidei")
  wm_children()                ──►    occ_search() south of 60°S
  wm_records_rank()            ──►    bind_rows() + filter coords
- wm_attr_data_()              ──►    left_join traits onto records
                                      ↓
                                   visualise (ggplot2 + sf, EPSG:3031)
 ```
@@ -449,14 +593,34 @@ with **colour = family** and explore **species richness** and **sampling effort*
 
 # Step 1 — Build the species list
 
+.pull-left[
 
 ``` r
 notothenioidei_id &lt;- wm_name2id("Notothenioidei")
 
 # Confirm taxonomic position
-wm_classification(notothenioidei_id) |&gt; select(rank, scientificname)
+wm_classification(notothenioidei_id) |&gt; 
+  select(rank, scientificname)
 ```
 
+```
+#&gt; # A tibble: 10 × 2
+#&gt;    rank        scientificname
+#&gt;    &lt;chr&gt;       &lt;chr&gt;         
+#&gt;  1 Kingdom     Animalia      
+#&gt;  2 Phylum      Chordata      
+#&gt;  3 Subphylum   Vertebrata    
+#&gt;  4 Infraphylum Gnathostomata 
+#&gt;  5 Parvphylum  Osteichthyes  
+#&gt;  6 Gigaclass   Actinopterygii
+#&gt;  7 Superclass  Actinopteri   
+#&gt;  8 Class       Teleostei     
+#&gt;  9 Order       Perciformes   
+#&gt; 10 Suborder    Notothenioidei
+```
+]
+
+.pull-right[
 
 ``` r
 # Direct children (families)
@@ -467,9 +631,12 @@ notothenioidei_families &lt;- tryCatch(
 
 # All accepted species per family (rank 220 = Species)
 family_ids &lt;- filter(notothenioidei_families, rank == "Family")$AphiaID
+family_names &lt;- filter(notothenioidei_families, rank == "Family")$scientificname
 
 species_list &lt;- map(family_ids, \(fid)
   tryCatch(wm_records_rank(220, id = fid), error = \(e) NULL))
+
+names(species_list) &lt;- family_names
 
 notothenioidei_spp &lt;- bind_rows(species_list, .id = "family") |&gt;
   filter(status == "accepted")
@@ -477,6 +644,10 @@ notothenioidei_spp &lt;- bind_rows(species_list, .id = "family") |&gt;
 cat("Total accepted species:", nrow(notothenioidei_spp))
 ```
 
+```
+#&gt; Total accepted species: 120
+```
+]
 ---
 
 # Step 2 — GBIF occurrences south of 60°S
@@ -488,14 +659,17 @@ target_species &lt;- notothenioidei_spp$scientificname
 gbif_results &lt;- map(target_species, \(sp)
   tryCatch(
     occ_search(
-      scientificName  = sp,
-      decimalLatitude = "-90,-60",
-      hasCoordinate   = TRUE,
-      limit           = 200,
-      fields          = c("name", "decimalLatitude", "decimalLongitude",
-                          "year", "datasetName", "species")
+      scientificName   = sp,
+      decimalLatitude  = "-90,-60",
+      hasCoordinate    = TRUE,
+      limit            = 200,
+      fields           = c("name", "decimalLatitude", "decimalLongitude",
+                           "year", "datasetName", "species")
     )$data,
-    error = \(e) NULL
+    error = \(e) {
+      message("Error for ", sp, ": ", conditionMessage(e))
+      NULL
+    }
   ))
 
 gbif_df &lt;- bind_rows(gbif_results) |&gt;
@@ -504,9 +678,13 @@ gbif_df &lt;- bind_rows(gbif_results) |&gt;
 cat("Total GBIF records:", nrow(gbif_df))
 ```
 
+```
+#&gt; Total GBIF records: 6996
+```
+
 ---
 
-# Step 3 — Join WoRMS metadata &amp; traits
+# Step 3 — Join gbif data with taxonomy
 
 
 ``` r
@@ -521,19 +699,6 @@ gbif_enriched &lt;- gbif_df |&gt;
   left_join(worms_lookup, by = "scientificname")
 ```
 
-
-``` r
-# Fetch traits and build enriched species table
-trait_df &lt;- bind_rows(
-  map(worms_lookup$AphiaID, \(aid)
-    tryCatch(wm_attr_data(aid), error = \(e) NULL)),
-  .id = "AphiaID") |&gt;
-  mutate(AphiaID = as.integer(AphiaID)) |&gt;
-  filter(measurementType %in% c("Functional group",
-                                 "IUCN Red List Category",
-                                 "Body size", "Diet"))
-```
-
 ---
 
 # Step 4 — Occurrence map (EPSG:3031)
@@ -544,7 +709,7 @@ world   &lt;- ne_countries(scale = "medium", returnclass = "sf")
 gbif_sf &lt;- st_as_sf(gbif_enriched,
                     coords = c("decimalLongitude", "decimalLatitude"), crs = 4326)
 
-ggplot() +
+occplot &lt;- ggplot() +
   geom_sf(data = st_transform(world, 3031),
           fill = "grey80", colour = "white", linewidth = 0.15) +
   geom_sf(data = st_transform(gbif_sf, 3031),
@@ -561,12 +726,23 @@ ggplot() +
 
 ---
 
+# Step 4 — Occurrence map (EPSG:3031)
+
+
+``` r
+occplot
+```
+
+&lt;img src="worrms_antarctic_slides_files/figure-html/occurrence map-1.png" alt="" width="80%" style="display: block; margin: auto;" /&gt;
+
+---
+
 # Step 5 — Species richness &amp; sampling effort
 
 .pull-left[
 
 ``` r
-notothenioidei_spp |&gt;
+richness_plot &lt;- notothenioidei_spp |&gt;
   count(family, name = "n_species") |&gt;
   mutate(family = fct_reorder(
     family, n_species)) |&gt;
@@ -584,7 +760,20 @@ notothenioidei_spp |&gt;
 .pull-right[
 
 ``` r
-gbif_enriched |&gt;
+richness_plot
+```
+
+&lt;img src="worrms_antarctic_slides_files/figure-html/richness-plotted-1.png" alt="" width="80%" style="display: block; margin: auto;" /&gt;
+]
+
+---
+
+# Step 5 — Species richness &amp; sampling effort
+
+.pull-left[
+
+``` r
+temporal_plot &lt;- gbif_enriched |&gt;
   filter(!is.na(year)) |&gt;
   mutate(decade = (year %/% 10) * 10) |&gt;
   count(decade, family) |&gt;
@@ -598,6 +787,15 @@ gbif_enriched |&gt;
   theme_minimal() +
   theme(legend.position = "bottom")
 ```
+]
+
+.pull-right[
+
+``` r
+temporal_plot
+```
+
+&lt;img src="worrms_antarctic_slides_files/figure-html/temporal-plotted-1.png" alt="" width="80%" style="display: block; margin: auto;" /&gt;
 ]
 
 ---
@@ -636,10 +834,14 @@ class: inverse, center, middle
 | `wm_sources()` | Literature sources | ✓ |
 | `wm_attr_def()` | Attribute definitions | ✓ |
 | `wm_attr_category()` | Attribute values | ✓ |
+]
+
+---
+| Function | Purpose | `_` variant? |
+|---|---|:---:|
 | `wm_attr_data()` | **Trait data** | ✓ |
 | `wm_attr_aphia()` | Taxa by attribute | ✓ |
 | `wm_ranks_id/name()` | Rank lookup | — |
-]
 
 ---
 
@@ -694,7 +896,7 @@ class: inverse, center, middle
 # Thank you
 
 **Full annotated tutorial:**
-&lt;img src="worrms_antarctic_slides_files/figure-html/qr-code-1.png" alt="" width="216" style="display: block; margin: auto;" /&gt;
+&lt;img src="worrms_antarctic_slides_files/figure-html/qr-code-1.png" alt="" width="25%" style="display: block; margin: auto;" /&gt;
 
 **Other links:**  
 📦 [docs.ropensci.org/worrms](https://docs.ropensci.org/worrms)  

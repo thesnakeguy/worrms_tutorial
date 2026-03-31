@@ -22,7 +22,8 @@ knitr::opts_chunk$set(
   warning = FALSE,
   comment = "#>",
   fig.retina = 2,
-  fig.align = "center"
+  fig.align = "center",
+  out.width = "80%"
 )
 ```
 
@@ -77,12 +78,6 @@ library(worrms)
 ```
 ]
 
----
-class: inverse, center, middle
-
-# The AphiaID
-
-### WoRMS' primary key
 
 ---
 
@@ -110,7 +105,7 @@ wm_id2name(236217)
 ]
 
 .pull-right[
-```{r aphia3, eval=FALSE}
+```{r aphia3, eval=TRUE}
 # Vectorised batch lookup (one API call)
 spp <- c("Euphausia superba",
          "Dissostichus eleginoides",
@@ -118,14 +113,6 @@ spp <- c("Euphausia superba",
 
 wm_name2id_(spp)
 ```
-
-> ⚡ Always prefer `wm_name2id_()` over  
-> looping `wm_name2id()` — one HTTP request  
-> instead of N.
-
-> ⚠️ Always check `status`: a name can be  
-> an unaccepted synonym. Use `valid_AphiaID`  
-> to redirect to the accepted record.
 ]
 
 ---
@@ -139,12 +126,14 @@ class: inverse, center, middle
 
 `wm_record()` is the workhorse: ~25 fields per taxon.
 
-```{r record, eval=FALSE}
-krill_record <- wm_record(236217)
-glimpse(krill_record)
-```
-
 .pull-left[
+```{r record, eval=TRUE}
+krill_record <- wm_record(236217)[1:15] |>
+glimpse() 
+```
+]
+
+.pull-right[
 | Field | Meaning |
 |---|---|
 | `AphiaID` | Unique WoRMS identifier |
@@ -152,10 +141,6 @@ glimpse(krill_record)
 | `status` | `"accepted"` or `"unaccepted"` |
 | `valid_AphiaID` | Points to accepted record |
 | `rank` | Species, Genus, … |
-]
-.pull-right[
-| Field | Meaning |
-|---|---|
 | `isMarine` | Habitat flag |
 | `isBrackish` | Habitat flag |
 | `isFreshwater` | Habitat flag |
@@ -169,7 +154,7 @@ glimpse(krill_record)
 
 .pull-left[
 **Exact & fuzzy search**
-```{r records-name, eval=FALSE}
+```{r records-name, eval=TRUE}
 # Exact match
 wm_records_name("Euphausia superba") |>
   select(AphiaID, scientificname, status)
@@ -184,7 +169,7 @@ wm_records_name("Euphausia su",
 .pull-right[
 **TAXAMATCH** — WoRMS' own algorithm, ideal for cleaning field species lists
 
-```{r taxamatch, eval=FALSE}
+```{r taxamatch, eval=TRUE}
 messy <- c("Euphausia superba",  # correct
            "Euphausia supurba",  # typo
            "Notothenia coriceps")# missing letter
@@ -203,26 +188,28 @@ bind_rows(res, .id = "query") |>
 
 .pull-left[
 **Full classification path**
-```{r class, eval=FALSE}
+```{r class, eval=TRUE}
 wm_classification(236217) |>
-  select(rank, scientificname)
-```
-
-**Direct children of a taxon**
-```{r children, eval=FALSE}
-euphausiacea_id <- wm_name2id(
-  "Euphausiacea")
-
-# Guard with tryCatch — HTTP 204
-# (no children) throws a hard error
-tryCatch(
-  wm_children(euphausiacea_id),
-  error = function(e) tibble()
-)
+  select(rank, scientificname) |> head()
 ```
 ]
 
-.pull-right[
+.pull.right[
+**Direct children of a taxon**
+```{r children, eval=TRUE}
+euphausiacea_id <- wm_name2id(
+  "Euphausiacea")
+
+wm_children(euphausiacea_id) |> select(AphiaID, scientificname, status )
+```
+]
+
+
+---
+
+# Family 2 — Taxonomy tree navigation
+
+.pull-left[
 **Rank lookups**
 ```{r ranks, eval=FALSE}
 wm_ranks_id(220)         # → "Species"
@@ -232,14 +219,16 @@ wm_ranks_name("Species") # → 220
 > ⚠️ The same rank (e.g. *Species*) exists  
 > independently in multiple kingdoms —  
 > rank IDs are kingdom-specific.
+]
 
+.pull.right[
 **All species under a parent taxon**
-```{r rank-search, eval=FALSE}
+```{r rank-search, eval=TRUE}
 euphausiidae_id <- wm_name2id(
   "Euphausiidae")
 
 wm_records_rank(220,
-  id = euphausiidae_id)
+  id = euphausiidae_id) |> select(AphiaID, scientificname, status) |> head()
 ```
 ]
 
@@ -249,36 +238,19 @@ wm_records_rank(220,
 
 .pull-left[
 **Synonyms**
-```{r syn, eval=FALSE}
+```{r syn, eval=TRUE}
 # Euphausia superba
 syn <- wm_synonyms(236217)
 syn |> select(scientificname,
-              status,
-              unacceptreason)
-```
-
-```{r syn2, eval=FALSE}
-# Patagonian toothfish
-toothfish_id <- wm_name2id(
-  "Dissostichus eleginoides")
-wm_synonyms(toothfish_id) |>
-  select(scientificname, status)
+              status)
 ```
 ]
 
 .pull-right[
 **Common / vernacular names**
-```{r common, eval=FALSE}
+```{r common, eval=TRUE}
 # All common names for krill
 wm_common_id(236217)
-```
-
-```{r common2, eval=FALSE}
-# Search by vernacular name
-wm_records_common("krill",
-                  fuzzy = FALSE) |>
-  select(AphiaID,
-         scientificname, rank)
 ```
 ]
 
@@ -288,7 +260,7 @@ wm_records_common("krill",
 
 .pull-left[
 **Geographic distribution**
-```{r dist, eval=FALSE}
+```{r dist, eval=TRUE}
 krill_dist <- wm_distribution(236217)
 
 # Records per locality
@@ -316,10 +288,8 @@ wm_sources(236217) |>
 | `iucn` | IUCN Red List |
 | `fishbase` | FishBase |
 
-```{r external, eval=FALSE}
+```{r external, eval=TRUE}
 wm_external(234700, type = "fishbase")
-wm_record_by_external(96559,
-                      type = "tsn")
 ```
 ]
 
@@ -341,24 +311,33 @@ wm_attr_def(id = 1)   # IUCN Red List
 wm_attr_def(id = 7)   # Functional group
 wm_attr_def(id = 15)  # Body size
 ```
+]
 
+.pull-right[
 **Browse values within a category**
-```{r attr-cat, eval=FALSE}
+```{r attr-cat, eval=TRUE}
 wm_attr_category(id = 7) |>
   select(measurementValueID,
          measurementValue)
 ```
 ]
 
-.pull-right[
+---
+
+# Trait attributes — overview
+
 **Fetch traits for a taxon**
-```{r attr-data, eval=FALSE}
+```{r attr-data, eval=TRUE}
 krill_attrs <- wm_attr_data(236217)
 krill_attrs |> glimpse()
 ```
 
+---
+
+# Trait attributes — overview
+
 **Vectorised batch retrieval**
-```{r attr-batch, eval=FALSE}
+```{r attr-batch, eval=TRUE}
 ids <- unlist(wm_name2id_(c(
   "Euphausia superba",
   "Dissostichus eleginoides",
@@ -368,7 +347,6 @@ bind_rows(wm_attr_data_(ids)) |>
   select(AphiaID, measurementType,
          measurementValue)
 ```
-]
 
 ---
 
@@ -376,28 +354,12 @@ bind_rows(wm_attr_data_(ids)) |>
 
 `wm_attr_aphia()` flips the question: *which taxa have a given attribute?*
 
-```{r attr-aphia, eval=FALSE}
+```{r attr-aphia, eval=TRUE}
 # All taxa with an IUCN Red List category (attribute type 1)
 # Results are paginated — up to 50 per page
 taxa_with_iucn <- wm_attr_aphia(id = 1)
 head(taxa_with_iucn, 10)
 ```
-
-<br>
-
-**Typical trait workflow in one pipeline:**
-
-```{r trait-pipeline, eval=FALSE}
-ids |>
-  wm_attr_data_() |>                                        # fetch traits (vectorised)
-  bind_rows() |>
-  filter(measurementType == "Body size") |>                 # keep one trait type
-  mutate(size_cm = as.numeric(
-    str_extract(measurementValue, "[0-9]+"))) |>            # parse value
-  group_by(AphiaID) |>
-  summarise(max_size_cm = max(size_cm, na.rm = TRUE))       # one value per species
-```
-
 ---
 class: inverse, center, middle
 
@@ -415,7 +377,6 @@ class: inverse, center, middle
  wm_name2id("Notothenioidei")
  wm_children()                ──►    occ_search() south of 60°S
  wm_records_rank()            ──►    bind_rows() + filter coords
- wm_attr_data_()              ──►    left_join traits onto records
                                      ↓
                                   visualise (ggplot2 + sf, EPSG:3031)
 ```
@@ -428,14 +389,18 @@ with **colour = family** and explore **species richness** and **sampling effort*
 
 # Step 1 — Build the species list
 
-```{r usecase-subtree, eval=FALSE}
+.pull-left[
+```{r usecase-subtree, eval=TRUE}
 notothenioidei_id <- wm_name2id("Notothenioidei")
 
 # Confirm taxonomic position
-wm_classification(notothenioidei_id) |> select(rank, scientificname)
+wm_classification(notothenioidei_id) |> 
+  select(rank, scientificname)
 ```
+]
 
-```{r usecase-families, eval=FALSE}
+.pull-right[
+```{r usecase-families, eval=TRUE}
 # Direct children (families)
 notothenioidei_families <- tryCatch(
   wm_children(notothenioidei_id),
@@ -444,34 +409,40 @@ notothenioidei_families <- tryCatch(
 
 # All accepted species per family (rank 220 = Species)
 family_ids <- filter(notothenioidei_families, rank == "Family")$AphiaID
+family_names <- filter(notothenioidei_families, rank == "Family")$scientificname
 
 species_list <- map(family_ids, \(fid)
   tryCatch(wm_records_rank(220, id = fid), error = \(e) NULL))
+
+names(species_list) <- family_names
 
 notothenioidei_spp <- bind_rows(species_list, .id = "family") |>
   filter(status == "accepted")
 
 cat("Total accepted species:", nrow(notothenioidei_spp))
 ```
-
+]
 ---
 
 # Step 2 — GBIF occurrences south of 60°S
 
-```{r usecase-gbif, eval=FALSE}
+```{r usecase-gbif, eval=TRUE}
 target_species <- notothenioidei_spp$scientificname
 
 gbif_results <- map(target_species, \(sp)
   tryCatch(
     occ_search(
-      scientificName  = sp,
-      decimalLatitude = "-90,-60",
-      hasCoordinate   = TRUE,
-      limit           = 200,
-      fields          = c("name", "decimalLatitude", "decimalLongitude",
-                          "year", "datasetName", "species")
+      scientificName   = sp,
+      decimalLatitude  = "-90,-60",
+      hasCoordinate    = TRUE,
+      limit            = 200,
+      fields           = c("name", "decimalLatitude", "decimalLongitude",
+                           "year", "datasetName", "species")
     )$data,
-    error = \(e) NULL
+    error = \(e) {
+      message("Error for ", sp, ": ", conditionMessage(e))
+      NULL
+    }
   ))
 
 gbif_df <- bind_rows(gbif_results) |>
@@ -482,9 +453,9 @@ cat("Total GBIF records:", nrow(gbif_df))
 
 ---
 
-# Step 3 — Join WoRMS metadata & traits
+# Step 3 — Join gbif data with taxonomy
 
-```{r usecase-join, eval=FALSE}
+```{r usecase-join, eval=TRUE}
 # WoRMS lookup table
 worms_lookup <- notothenioidei_spp |>
   filter(scientificname %in% target_species) |>
@@ -496,28 +467,16 @@ gbif_enriched <- gbif_df |>
   left_join(worms_lookup, by = "scientificname")
 ```
 
-```{r usecase-traits, eval=FALSE}
-# Fetch traits and build enriched species table
-trait_df <- bind_rows(
-  map(worms_lookup$AphiaID, \(aid)
-    tryCatch(wm_attr_data(aid), error = \(e) NULL)),
-  .id = "AphiaID") |>
-  mutate(AphiaID = as.integer(AphiaID)) |>
-  filter(measurementType %in% c("Functional group",
-                                 "IUCN Red List Category",
-                                 "Body size", "Diet"))
-```
-
 ---
 
 # Step 4 — Occurrence map (EPSG:3031)
 
-```{r usecase-map, eval=FALSE, fig.width=8, fig.height=4.5}
+```{r usecase-map, eval=TRUE, fig.width=8, fig.height=4.5}
 world   <- ne_countries(scale = "medium", returnclass = "sf")
 gbif_sf <- st_as_sf(gbif_enriched,
                     coords = c("decimalLongitude", "decimalLatitude"), crs = 4326)
 
-ggplot() +
+occplot <- ggplot() +
   geom_sf(data = st_transform(world, 3031),
           fill = "grey80", colour = "white", linewidth = 0.15) +
   geom_sf(data = st_transform(gbif_sf, 3031),
@@ -534,11 +493,20 @@ ggplot() +
 
 ---
 
+# Step 4 — Occurrence map (EPSG:3031)
+
+```{r occurrence map, eval=TRUE, fig.width=8, fig.height=4.5}
+occplot
+
+```
+
+---
+
 # Step 5 — Species richness & sampling effort
 
 .pull-left[
-```{r richness-plot, eval=FALSE}
-notothenioidei_spp |>
+```{r richness-plot, eval=TRUE}
+richness_plot <- notothenioidei_spp |>
   count(family, name = "n_species") |>
   mutate(family = fct_reorder(
     family, n_species)) |>
@@ -554,8 +522,18 @@ notothenioidei_spp |>
 ]
 
 .pull-right[
-```{r temporal-plot, eval=FALSE}
-gbif_enriched |>
+```{r richness-plotted, eval=TRUE}
+richness_plot
+```
+]
+
+---
+
+# Step 5 — Species richness & sampling effort
+
+.pull-left[
+```{r temporal-plot, eval=TRUE}
+temporal_plot <- gbif_enriched |>
   filter(!is.na(year)) |>
   mutate(decade = (year %/% 10) * 10) |>
   count(decade, family) |>
@@ -568,6 +546,12 @@ gbif_enriched |>
        y = "N occurrences") +
   theme_minimal() +
   theme(legend.position = "bottom")
+```
+]
+
+.pull-right[
+```{r temporal-plotted, eval=TRUE}
+temporal_plot
 ```
 ]
 
@@ -607,10 +591,14 @@ class: inverse, center, middle
 | `wm_sources()` | Literature sources | ✓ |
 | `wm_attr_def()` | Attribute definitions | ✓ |
 | `wm_attr_category()` | Attribute values | ✓ |
+]
+
+---
+| Function | Purpose | `_` variant? |
+|---|---|:---:|
 | `wm_attr_data()` | **Trait data** | ✓ |
 | `wm_attr_aphia()` | Taxa by attribute | ✓ |
 | `wm_ranks_id/name()` | Rank lookup | — |
-]
 
 ---
 
@@ -665,8 +653,9 @@ class: inverse, center, middle
 # Thank you
 
 **Full annotated tutorial:**
-```{r qr-code, echo=FALSE, fig.width=3, fig.height=3}
+```{r qr-code, echo=FALSE, fig.width=3, fig.height=3, out.width="25%"}
 library(qrcode)
+par(mar = c(0, 0, 0, 0))
 plot(qr_code("https://thesnakeguy.github.io/worrms_tutorial/worrms_antarctic_tutorial.html"))
 ```
 
