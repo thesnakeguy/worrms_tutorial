@@ -31,3 +31,7 @@ tidy, tibble-returning R functions.
 2. Walk through **every** function family with Antarctic examples
 3. Demonstrate a full biodiversity use-case combining `worrms` with the **GBIF** occurrence data
    (via `rgbif`)
+
+## Github Pages:
+- https://thesnakeguy.github.io/worrms_tutorial/worrms_antarctic_slides.html
+- https://thesnakeguy.github.io/worrms_tutorial/worrms_antarctic_tutorial.html
