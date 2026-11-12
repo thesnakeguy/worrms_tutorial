@@ -1,3 +1,5 @@
+> This training material was produced for the 2026 Antarctic Marine species Traits workshop -- co-organized by biodiversity.aq and WoRMS DTO
+
 # Introduction
 
 ## What is WoRMS?
